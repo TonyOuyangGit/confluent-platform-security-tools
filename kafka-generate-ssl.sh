@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# we make some modifications to make it more efficient with less prompt input and support hostname verification by adding input
+# file with extensions
+# Reference link:
+# https://www.ibm.com/docs/en/hpvs/1.2.x?topic=reference-openssl-configuration-examples
+# https://docs.oracle.com/javase/8/docs/technotes/tools/unix/keytool.html
+# https://www.openssl.org/docs/manmaster/man1/openssl-req.html
+# https://www.openssl.org/docs/man1.1.1/man1/x509.html
 
 set -e
 
@@ -11,14 +18,17 @@ CA_CERT_FILE="ca-cert"
 KEYSTORE_SIGN_REQUEST="cert-file"
 KEYSTORE_SIGN_REQUEST_SRL="ca-cert.srl"
 KEYSTORE_SIGNED_CERT="cert-signed"
-SSL_CONFIG_FILE="ssl.cnf"
+EXTENSION_CONFIG_FILE="extensions.cnf"
 
-# the below added variables are used for keytool to omit user input
+# the below added variables are used for openssl and keytool to omit user input
 COUNTRY=US
 STATE=CA
-OU=engineering
-CN=terratrue
 LOCATION="San Francisco"
+COMMON_NAME="Terratrue Inc."
+ORGANIZATION_UNIT="Engineering"
+
+OPENSSL_SUBJ="/C=$COUNTRY/ST=$STATE/L=$LOCATION/O=$ORGANIZATION_UNIT/CN=$COMMON_NAME"
+KEYTOOL_DNAME="C=$COUNTRY, ST=$STATE, L=$LOCATION, O=$ORGANIZATION_UNIT, CN=$COMMON_NAME"
 
 function file_exists_and_exit() {
   echo "'$1' cannot exist. Move or delete it before"
@@ -77,7 +87,8 @@ if [ "$generate_trust_store" == "y" ]; then
 
   openssl req -new -x509 -keyout $TRUSTSTORE_WORKING_DIRECTORY/ca-key \
     -out $TRUSTSTORE_WORKING_DIRECTORY/$CA_CERT_FILE -days $VALIDITY_IN_DAYS \
-    -extensions v3_req -config $SSL_CONFIG_FILE
+    -subj "$OPENSSL_SUBJ" \
+    -extensions extension_req -config $EXTENSION_CONFIG_FILE
 
   trust_store_private_key_file="$TRUSTSTORE_WORKING_DIRECTORY/ca-key"
 
@@ -100,7 +111,7 @@ if [ "$generate_trust_store" == "y" ]; then
 
 keytool -keystore $TRUSTSTORE_WORKING_DIRECTORY/$DEFAULT_TRUSTSTORE_FILENAME \
     -alias CARoot -import -file $TRUSTSTORE_WORKING_DIRECTORY/$CA_CERT_FILE \
-    -noprompt -dname "C=$COUNTRY, ST=$STATE, L=$LOCATION, O=$OU, CN=$CN" 
+    -noprompt -dname "$KEYTOOL_DNAME" 
 
   trust_store_file="$TRUSTSTORE_WORKING_DIRECTORY/$DEFAULT_TRUSTSTORE_FILENAME"
 
@@ -153,7 +164,7 @@ echo " - A key password, for the key being generated within the keystore. Rememb
 
 keytool -keystore $KEYSTORE_WORKING_DIRECTORY/$KEYSTORE_FILENAME \
   -alias localhost -validity $VALIDITY_IN_DAYS -genkey -keyalg RSA \
-  -noprompt -dname "C=$COUNTRY, ST=$STATE, L=$LOCATION, O=$OU, CN=$CN"
+  -noprompt -dname "$KEYTOOL_DNAME"
 
 echo
 echo "'$KEYSTORE_WORKING_DIRECTORY/$KEYSTORE_FILENAME' now contains a key pair and a"
@@ -181,7 +192,7 @@ echo "You will be prompted for the trust store's private key password."
 openssl x509 -req -CA $CA_CERT_FILE -CAkey $trust_store_private_key_file \
   -in $KEYSTORE_SIGN_REQUEST -out $KEYSTORE_SIGNED_CERT \
   -days $VALIDITY_IN_DAYS -CAcreateserial \
-  -extfile $SSL_CONFIG_FILE -extensions v3_req
+  -extfile $EXTENSION_CONFIG_FILE -extensions extension_req
 # creates $KEYSTORE_SIGN_REQUEST_SRL which is never used or needed.
 
 echo
