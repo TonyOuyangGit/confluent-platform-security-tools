@@ -7,5 +7,5 @@ extendedKeyUsage       = serverAuth
 subjectAltName         = @sans
 
 [ sans ]
-DNS.1 = sim-frontend.com
-IP.1 = 34.133.161.230
+DNS.1 = <HOSTNAME>
+IP.1 = <IP_ADDRESS>
